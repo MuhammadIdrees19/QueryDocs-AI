@@ -97,3 +97,21 @@ chunk files.
 Visit `http://127.0.0.1:8000/docs` to explore the API or try `POST /chat`
 directly. Set `GROQ_API_KEY` in `.env`; do not share it in chat or commit
 it. Sessions are held in memory and reset when the server restarts.
+
+## Streamlit app
+
+The same question flow is available as a Streamlit app for Streamlit Community Cloud.
+From the project root:
+
+```bash
+streamlit run streamlit_app.py
+```
+
+Locally it reads `GROQ_API_KEY`, `QDRANT_URL`, and `QDRANT_API_KEY` from `.env`.
+On Streamlit Community Cloud, set those same names in the app secrets and do not
+commit them. Copy `.streamlit/secrets.toml.example` to `.streamlit/secrets.toml`
+only on your own machine.
+
+Deploy the GitHub repository with branch `main` and main file `streamlit_app.py`.
+The first launch downloads the local embedding and reranker models, then connects
+to the existing Qdrant Cloud collections.

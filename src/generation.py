@@ -19,7 +19,9 @@ def build_chat_model() -> ChatGroq:
     load_dotenv(PROJECT_ROOT / ".env", override=True)
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
-        raise RuntimeError("Set GROQ_API_KEY in the project .env file.")
+        raise RuntimeError(
+            "Set GROQ_API_KEY in the project .env file or in the Streamlit app secrets."
+        )
 
     return ChatGroq(
         api_key=api_key,

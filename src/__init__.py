@@ -1,0 +1,1 @@
+"""QueryDocs AI application package."""

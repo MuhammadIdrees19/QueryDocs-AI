@@ -150,7 +150,7 @@ def require_qdrant_settings() -> None:
     ]
     if missing_variables:
         raise RuntimeError(
-            "Set these variables in the project .env file: "
+            "Set these variables in the project .env file or in the Streamlit app secrets: "
             + ", ".join(missing_variables)
         )
 

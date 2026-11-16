@@ -4,6 +4,7 @@ __pycache__/
 *.pyo
 *.pyd
 .env
+.streamlit/secrets.toml
 .pytest_cache/
 .mypy_cache/
 .coverage
