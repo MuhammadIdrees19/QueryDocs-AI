@@ -243,7 +243,18 @@ def inject_styles(*, hide_sidebar: bool, auth_layout: bool = False) -> None:
     auth_rule = ""
     if auth_layout:
         auth_rule = """
-        .stApp:has(.auth-page) header[data-testid="stHeader"] { display: none; }
+        .stApp:has(.auth-page) header[data-testid="stHeader"],
+        .stApp:has(.auth-page) [data-testid="stToolbar"],
+        .stApp:has(.auth-page) [data-testid="stStatusWidget"],
+        .stApp:has(.auth-page) [data-testid="stDecoration"],
+        .stApp:has(.auth-page) [data-testid="stBottom"],
+        .stApp:has(.auth-page) footer,
+        .stApp:has(.auth-page) #MainMenu,
+        .stApp:has(.auth-page) .stDeployButton,
+        .stApp:has(.auth-page) [data-testid="stAppDeployButton"] {
+            display: none !important;
+            visibility: hidden !important;
+        }
         .stApp:has(.auth-page) .block-container {
             max-width: 100%;
             padding: 0;
@@ -253,12 +264,9 @@ def inject_styles(*, hide_sidebar: bool, auth_layout: bool = False) -> None:
             align-items: stretch;
             min-height: 100vh;
         }
-        .stApp:has(.auth-page) [data-testid="column"]:first-child {
-            background:
-                radial-gradient(circle at 18% 22%, rgba(255,255,255,.16), transparent 28%),
-                radial-gradient(circle at 88% 78%, rgba(255,255,255,.12), transparent 26%),
-                linear-gradient(180deg, #4d7dff 0%, #2f62f6 100%);
-            color: white;
+        .stApp:has(.auth-page) [data-testid="column"]:first-child,
+        .stApp:has(.auth-page) [data-testid="stColumn"]:first-child {
+            background: #f4f7fb !important;
             min-height: 100vh;
         }
         .stApp:has(.auth-page) [data-testid="column"]:last-child {
@@ -278,20 +286,20 @@ def inject_styles(*, hide_sidebar: bool, auth_layout: bool = False) -> None:
             flex-direction: column;
             justify-content: space-between;
             padding: 28px 36px 24px;
-            color: white;
+            color: #3867e8;
         }
-        .brand-lockup { display: flex; align-items: center; gap: 12px; font-weight: 700; }
+        .brand-lockup { display: flex; align-items: center; gap: 12px; font-weight: 700; color: #3867e8; }
         .brand-mark {
             width: 36px; height: 36px; border-radius: 10px;
             display: grid; place-items: center;
-            background: white; color: #2f62f6; font-weight: 800;
+            background: #3867e8; color: white; font-weight: 800;
         }
         .brand-copy h1 {
-            color: white; font-size: 42px; line-height: 1.15;
+            color: #3867e8 !important; font-size: 42px; line-height: 1.15;
             margin: 0 0 16px; max-width: 460px;
         }
-        .brand-copy p { color: rgba(255,255,255,.88); font-size: 16px; max-width: 420px; margin: 0; }
-        .brand-foot { color: rgba(255,255,255,.75); font-size: 13px; }
+        .brand-copy p { color: #3867e8 !important; font-size: 16px; max-width: 420px; margin: 0; }
+        .brand-foot { color: #3867e8; font-size: 13px; }
         .auth-kicker { color: #5c677a; margin: 0 0 18px; }
         .auth-divider { color: #8b95a7; text-align: center; margin: 8px 0 4px; font-size: 14px; }
         """
