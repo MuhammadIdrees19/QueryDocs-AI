@@ -516,82 +516,82 @@ def render_login_page() -> None:
             unsafe_allow_html=True,
         )
         render_google_button()
-            with st.form("signup-form"):
-                name = st.text_input("Full name", placeholder="Your name")
-                email = st.text_input("Email address", placeholder="you@example.com")
-                password = st.text_input("Password", type="password", placeholder="At least 6 characters")
-                confirm_password = st.text_input(
-                    "Confirm password",
-                    type="password",
-                    placeholder="Repeat your password",
-                )
-                submitted = st.form_submit_button(
-                    "Create account",
-                    use_container_width=True,
-                    type="primary",
-                )
-            if submitted:
-                if password != confirm_password:
-                    st.session_state.auth_error = "Passwords do not match."
-                    st.rerun()
-                try:
-                    error = signup(name, email, password)
-                except Exception as error:
-                    st.session_state.auth_error = f"Sign up failed. {error}"
-                    st.rerun()
-                if error:
-                    st.session_state.auth_error = error
-                    st.rerun()
-                try:
-                    user, sign_in_error = authenticate(email, password)
-                except Exception as error:
-                    st.session_state.auth_error = f"Account created, but sign in failed. {error}"
-                    st.session_state.auth_view = "login"
-                    st.rerun()
-                if sign_in_error or user is None:
-                    st.session_state.auth_error = (
-                        sign_in_error or "Account created. Log in to continue."
-                    )
-                    st.session_state.auth_view = "login"
-                    st.rerun()
-                complete_login(user)
-                st.rerun()
-            if st.button("Back to log in", key="back-login", use_container_width=True):
-                st.session_state.auth_view = "login"
-                st.session_state.auth_error = ""
-                st.rerun()
-            return
-
-        st.subheader("Reset password")
-        with st.form("forgot-form"):
-            email = st.text_input("Email", placeholder="Email address")
-            new_password = st.text_input(
-                "New password",
+        with st.form("signup-form"):
+            name = st.text_input("Full name", placeholder="Your name")
+            email = st.text_input("Email address", placeholder="you@example.com")
+            password = st.text_input("Password", type="password", placeholder="At least 6 characters")
+            confirm_password = st.text_input(
+                "Confirm password",
                 type="password",
-                placeholder="New password",
+                placeholder="Repeat your password",
             )
             submitted = st.form_submit_button(
-                "Update password",
+                "Create account",
                 use_container_width=True,
                 type="primary",
             )
         if submitted:
+            if password != confirm_password:
+                st.session_state.auth_error = "Passwords do not match."
+                st.rerun()
             try:
-                error = reset_password(email, new_password)
+                error = signup(name, email, password)
             except Exception as error:
-                st.session_state.auth_error = f"Password reset failed. {error}"
+                st.session_state.auth_error = f"Sign up failed. {error}"
                 st.rerun()
             if error:
                 st.session_state.auth_error = error
                 st.rerun()
-            st.session_state.auth_error = ""
-            st.session_state.auth_notice = "Password updated. Log in with the new password."
-            st.session_state.auth_view = "login"
+            try:
+                user, sign_in_error = authenticate(email, password)
+            except Exception as error:
+                st.session_state.auth_error = f"Account created, but sign in failed. {error}"
+                st.session_state.auth_view = "login"
+                st.rerun()
+            if sign_in_error or user is None:
+                st.session_state.auth_error = (
+                    sign_in_error or "Account created. Log in to continue."
+                )
+                st.session_state.auth_view = "login"
+                st.rerun()
+            complete_login(user)
             st.rerun()
-        if st.button("Back to log in", use_container_width=True):
+        if st.button("Back to log in", key="back-login", use_container_width=True):
             st.session_state.auth_view = "login"
             st.session_state.auth_error = ""
             st.rerun()
+        return
+
+    st.subheader("Reset password")
+    with st.form("forgot-form"):
+        email = st.text_input("Email", placeholder="Email address")
+        new_password = st.text_input(
+            "New password",
+            type="password",
+            placeholder="New password",
+        )
+        submitted = st.form_submit_button(
+            "Update password",
+            use_container_width=True,
+            type="primary",
+        )
+    if submitted:
+        try:
+            error = reset_password(email, new_password)
+        except Exception as error:
+            st.session_state.auth_error = f"Password reset failed. {error}"
+            st.rerun()
+        if error:
+            st.session_state.auth_error = error
+            st.rerun()
+        st.session_state.auth_error = ""
+        st.session_state.auth_notice = "Password updated. Log in with the new password."
+        st.session_state.auth_view = "login"
+        st.rerun()
+    if st.button("Back to log in", key="back-reset", use_container_width=True):
+        st.session_state.auth_view = "login"
+        st.session_state.auth_error = ""
+        st.rerun()
 
 
 def render_sidebar() -> None:
