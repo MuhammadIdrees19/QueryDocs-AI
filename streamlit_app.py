@@ -5,7 +5,7 @@ import streamlit as st
 from groq import APIStatusError, RateLimitError
 from langchain_core.messages import AIMessage, HumanMessage
 
-from src.accounts import authenticate, save_chats, signup
+from src.accounts import authenticate, reset_password, save_chats, signup
 from src.citations import matching_sources
 
 SECRET_KEYS = ("GROQ_API_KEY", "QDRANT_URL", "QDRANT_API_KEY")
@@ -27,6 +27,7 @@ st.set_page_config(
     page_title="QueryDocs AI",
     page_icon="Q",
     layout="centered",
+    initial_sidebar_state="collapsed",
 )
 apply_streamlit_secrets()
 
@@ -70,16 +71,19 @@ def source_rows(ranked_documents: list) -> list[dict]:
 
 
 def ensure_session() -> None:
-    if "user" not in st.session_state:
-        st.session_state.user = None
-    if "chats" not in st.session_state:
-        st.session_state.chats = []
-    if "active_chat_id" not in st.session_state:
-        st.session_state.active_chat_id = None
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
-    if "auth_error" not in st.session_state:
-        st.session_state.auth_error = ""
+    defaults = {
+        "user": None,
+        "chats": [],
+        "active_chat_id": None,
+        "messages": [],
+        "auth_error": "",
+        "auth_notice": "",
+        "auth_view": "login",
+        "settings_open": False,
+    }
+    for key, value in defaults.items():
+        if key not in st.session_state:
+            st.session_state[key] = value
 
 
 def sync_active_chat() -> None:
@@ -139,12 +143,30 @@ def begin_chat(question: str) -> None:
     st.session_state.active_chat_id = chat_id
 
 
+def complete_login(user: dict) -> None:
+    st.session_state.user = {"email": user["email"], "name": user["name"]}
+    st.session_state.chats = list(user.get("chats") or [])
+    st.session_state.active_chat_id = None
+    st.session_state.messages = []
+    st.session_state.auth_error = ""
+    st.session_state.auth_notice = ""
+    st.session_state.auth_view = "login"
+    st.session_state.settings_open = False
+    if st.session_state.chats:
+        first = st.session_state.chats[0]
+        st.session_state.active_chat_id = first["id"]
+        st.session_state.messages = list(first.get("messages") or [])
+
+
 def sign_out() -> None:
     st.session_state.user = None
     st.session_state.chats = []
     st.session_state.active_chat_id = None
     st.session_state.messages = []
     st.session_state.auth_error = ""
+    st.session_state.auth_notice = ""
+    st.session_state.auth_view = "login"
+    st.session_state.settings_open = False
 
 
 @st.cache_resource(show_spinner="Loading models and connecting to Qdrant Cloud…")
@@ -206,78 +228,197 @@ def render_message(message: dict) -> None:
             st.caption("Searched: " + ", ".join(collections))
 
 
-def render_account() -> None:
-    mode = st.radio("Account", ["Sign in", "Sign up"], horizontal=True)
-    if mode == "Sign in":
-        with st.form("sign-in"):
-            email = st.text_input("Email")
-            password = st.text_input("Password", type="password")
-            submitted = st.form_submit_button("Sign in", use_container_width=True)
+def inject_styles(*, hide_sidebar: bool) -> None:
+    hide_rule = (
+        """
+        [data-testid="stSidebar"] { display: none !important; }
+        [data-testid="stSidebarCollapsedControl"] { display: none !important; }
+        """
+        if hide_sidebar
+        else ""
+    )
+    st.markdown(
+        f"""
+        <style>
+        {hide_rule}
+        .auth-shell {{
+            max-width: 420px;
+            margin: 4rem auto 2rem;
+            text-align: center;
+        }}
+        .auth-shell h1 {{
+            margin-bottom: 0.25rem;
+        }}
+        .auth-shell p {{
+            color: #5b6472;
+            margin-bottom: 1.5rem;
+        }}
+        section[data-testid="stSidebar"] > div:first-child {{
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }}
+        div[data-testid="stSidebarContent"] {{
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }}
+        .sidebar-spacer {{
+            flex: 1 1 auto;
+            min-height: 2rem;
+        }}
+        .sidebar-bottom {{
+            margin-top: auto;
+            padding-top: 0.75rem;
+            border-top: 1px solid rgba(49, 51, 63, 0.16);
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_login_page() -> None:
+    inject_styles(hide_sidebar=True)
+    st.markdown(
+        """
+        <div class="auth-shell">
+          <h1>QueryDocs AI</h1>
+          <p>Sign in to ask questions from your documents.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    left, center, right = st.columns([1, 2, 1])
+    with center:
+        if st.session_state.auth_notice:
+            st.success(st.session_state.auth_notice)
+        if st.session_state.auth_error:
+            st.error(st.session_state.auth_error)
+
+        view = st.session_state.auth_view
+        if view == "login":
+            with st.form("login-form"):
+                email = st.text_input(
+                    "Email",
+                    placeholder="Email address",
+                    label_visibility="collapsed",
+                )
+                password = st.text_input(
+                    "Password",
+                    type="password",
+                    placeholder="Password",
+                    label_visibility="collapsed",
+                )
+                submitted = st.form_submit_button("Log in", use_container_width=True, type="primary")
+            if submitted:
+                try:
+                    user, error = authenticate(email, password)
+                except Exception as error:
+                    st.session_state.auth_error = f"Sign in failed. {error}"
+                    st.rerun()
+                if error:
+                    st.session_state.auth_error = error
+                    st.rerun()
+                complete_login(user)
+                st.rerun()
+
+            if st.button("Forgotten password?", use_container_width=True):
+                st.session_state.auth_view = "forgot"
+                st.session_state.auth_error = ""
+                st.session_state.auth_notice = ""
+                st.rerun()
+            st.write("")
+            if st.button("Create new account", use_container_width=True):
+                st.session_state.auth_view = "signup"
+                st.session_state.auth_error = ""
+                st.session_state.auth_notice = ""
+                st.rerun()
+            return
+
+        if view == "signup":
+            st.subheader("Create new account")
+            with st.form("signup-form"):
+                name = st.text_input("Name", placeholder="Your name")
+                email = st.text_input("Email", placeholder="Email address")
+                password = st.text_input("Password", type="password", placeholder="Password")
+                submitted = st.form_submit_button(
+                    "Create account",
+                    use_container_width=True,
+                    type="primary",
+                )
+            if submitted:
+                try:
+                    error = signup(name, email, password)
+                except Exception as error:
+                    st.session_state.auth_error = f"Sign up failed. {error}"
+                    st.rerun()
+                if error:
+                    st.session_state.auth_error = error
+                    st.rerun()
+                try:
+                    user, sign_in_error = authenticate(email, password)
+                except Exception as error:
+                    st.session_state.auth_error = f"Account created, but sign in failed. {error}"
+                    st.session_state.auth_view = "login"
+                    st.rerun()
+                if sign_in_error or user is None:
+                    st.session_state.auth_error = (
+                        sign_in_error or "Account created. Log in to continue."
+                    )
+                    st.session_state.auth_view = "login"
+                    st.rerun()
+                complete_login(user)
+                st.rerun()
+            if st.button("Back to log in", use_container_width=True):
+                st.session_state.auth_view = "login"
+                st.session_state.auth_error = ""
+                st.rerun()
+            return
+
+        st.subheader("Reset password")
+        with st.form("forgot-form"):
+            email = st.text_input("Email", placeholder="Email address")
+            new_password = st.text_input(
+                "New password",
+                type="password",
+                placeholder="New password",
+            )
+            submitted = st.form_submit_button(
+                "Update password",
+                use_container_width=True,
+                type="primary",
+            )
         if submitted:
             try:
-                user, error = authenticate(email, password)
+                error = reset_password(email, new_password)
             except Exception as error:
-                st.session_state.auth_error = f"Sign in failed. {error}"
-                return
+                st.session_state.auth_error = f"Password reset failed. {error}"
+                st.rerun()
             if error:
                 st.session_state.auth_error = error
-                return
-            st.session_state.user = {"email": user["email"], "name": user["name"]}
-            st.session_state.chats = list(user["chats"])
-            st.session_state.active_chat_id = None
-            st.session_state.messages = []
+                st.rerun()
             st.session_state.auth_error = ""
-            if st.session_state.chats:
-                first = st.session_state.chats[0]
-                st.session_state.active_chat_id = first["id"]
-                st.session_state.messages = list(first.get("messages") or [])
+            st.session_state.auth_notice = "Password updated. Log in with the new password."
+            st.session_state.auth_view = "login"
             st.rerun()
-        return
-
-    with st.form("sign-up"):
-        name = st.text_input("Name")
-        email = st.text_input("Email")
-        password = st.text_input("Password", type="password")
-        submitted = st.form_submit_button("Sign up", use_container_width=True)
-    if submitted:
-        try:
-            error = signup(name, email, password)
-        except Exception as error:
-            st.session_state.auth_error = f"Sign up failed. {error}"
-            return
-        if error:
-            st.session_state.auth_error = error
-            return
-        try:
-            user, sign_in_error = authenticate(email, password)
-        except Exception as error:
-            st.session_state.auth_error = f"Account created, but sign in failed. {error}"
-            return
-        if sign_in_error or user is None:
-            st.session_state.auth_error = sign_in_error or "Account created. Sign in to continue."
-            return
-        st.session_state.user = {"email": user["email"], "name": user["name"]}
-        st.session_state.chats = []
-        st.session_state.active_chat_id = None
-        st.session_state.messages = []
-        st.session_state.auth_error = ""
-        st.rerun()
+        if st.button("Back to log in", use_container_width=True):
+            st.session_state.auth_view = "login"
+            st.session_state.auth_error = ""
+            st.rerun()
 
 
 def render_sidebar() -> None:
+    inject_styles(hide_sidebar=False)
     with st.sidebar:
         st.header("QueryDocs AI")
-        if st.session_state.user is None:
-            render_account()
-            if st.session_state.auth_error:
-                st.error(st.session_state.auth_error)
-            return
-
         st.caption(st.session_state.user["name"])
         if st.button("New chat", use_container_width=True):
             start_new_chat()
             st.rerun()
         st.divider()
+        st.caption("Chat history")
         if st.session_state.chats:
             for chat in st.session_state.chats:
                 selected = chat["id"] == st.session_state.active_chat_id
@@ -291,21 +432,30 @@ def render_sidebar() -> None:
                     st.rerun()
         else:
             st.caption("Your chats will appear here.")
-        st.divider()
-        if st.button("Sign out", use_container_width=True):
-            sign_out()
+
+        st.markdown('<div class="sidebar-spacer"></div>', unsafe_allow_html=True)
+        st.markdown('<div class="sidebar-bottom">', unsafe_allow_html=True)
+        if st.button("Settings", use_container_width=True):
+            st.session_state.settings_open = not st.session_state.settings_open
             st.rerun()
+        if st.session_state.settings_open:
+            st.caption(st.session_state.user["email"])
+            if st.button("Sign out", use_container_width=True):
+                sign_out()
+                st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
 
 
 ensure_session()
+
+if st.session_state.user is None:
+    render_login_page()
+    st.stop()
+
 render_sidebar()
 
 st.title("QueryDocs AI")
 st.caption("Ask a question about your documents. Answers include the source page.")
-
-if st.session_state.user is None:
-    st.info("Sign in or create an account to start a chat.")
-    st.stop()
 
 try:
     load_pipeline()

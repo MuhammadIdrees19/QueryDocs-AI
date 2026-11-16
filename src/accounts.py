@@ -127,3 +127,19 @@ def save_chats(email: str, chats: list[dict]) -> None:
         raise RuntimeError("Account not found.")
     user["chats"] = chats
     _write_user(user)
+
+
+def reset_password(email: str, new_password: str) -> str | None:
+    clean_email = _normalize_email(email)
+    if "@" not in clean_email or "." not in clean_email.split("@")[-1]:
+        return "Enter a valid email."
+    if len(new_password) < 6:
+        return "Use a password of at least 6 characters."
+    user = _read_user(clean_email)
+    if user is None:
+        return "No account was found for that email."
+    salt = secrets.token_hex(16)
+    user["salt"] = salt
+    user["password_hash"] = _password_hash(new_password, salt)
+    _write_user(user)
+    return None
