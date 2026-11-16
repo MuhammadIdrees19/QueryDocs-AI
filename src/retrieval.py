@@ -1,4 +1,6 @@
+import json
 import logging
+import re
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from time import perf_counter
@@ -8,6 +10,7 @@ from langchain_classic.retrievers.document_compressors import CrossEncoderRerank
 from langchain_community.cross_encoders import HuggingFaceCrossEncoder
 from langchain_core.callbacks import Callbacks
 from langchain_core.documents import Document
+from langchain_core.messages import BaseMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import Runnable
 from langchain_qdrant import QdrantVectorStore
@@ -22,6 +25,17 @@ RERANKER_MODEL = "BAAI/bge-reranker-base"
 RESULTS_PER_COLLECTION = 10
 MAX_RESULTS = 6
 CollectionName = Literal["AI _ML", "Finance", "HR"]
+ALL_COLLECTIONS: tuple[CollectionName, ...] = ("AI _ML", "Finance", "HR")
+COLLECTION_ALIASES = {
+    "ai _ml": "AI _ML",
+    "ai_ml": "AI _ML",
+    "ai/ml": "AI _ML",
+    "ai ml": "AI _ML",
+    "aiml": "AI _ML",
+    "machine learning": "AI _ML",
+    "finance": "Finance",
+    "hr": "HR",
+}
 
 
 class RouteDecision(BaseModel):
@@ -46,11 +60,81 @@ ROUTER_PROMPT = ChatPromptTemplate.from_messages(
 
 
 def build_router() -> Runnable:
-    llm = build_chat_model()
+    llm = build_chat_model(for_routing=True)
     return ROUTER_PROMPT | llm.with_structured_output(
         RouteDecision,
         method="function_calling",
     )
+
+
+def _keyword_collections(question: str) -> list[str]:
+    text = question.casefold()
+    selected: list[str] = []
+
+    def mentions(*terms: str) -> bool:
+        return any(re.search(rf"\b{re.escape(term)}\b", text) for term in terms)
+
+    if mentions("machine learning", "deep learning", "artificial intelligence", "neural", "ai", "ml"):
+        selected.append("AI _ML")
+    if mentions("finance", "financial", "budget", "invoice", "expense", "payroll"):
+        selected.append("Finance")
+    if mentions("hr", "human resources", "staff", "handbook", "employee", "leave"):
+        selected.append("HR")
+    return selected
+
+
+def _normalize_collection(name: object) -> str | None:
+    key = " ".join(str(name).strip().casefold().split())
+    mapped = COLLECTION_ALIASES.get(key, str(name).strip())
+    if mapped in ALL_COLLECTIONS:
+        return mapped
+    return None
+
+
+def _decision_from_payload(payload: object) -> RouteDecision | None:
+    if isinstance(payload, RouteDecision):
+        return payload
+    if isinstance(payload, BaseMessage):
+        tool_calls = getattr(payload, "tool_calls", None) or []
+        for call in tool_calls:
+            parsed = _decision_from_payload(call.get("args"))
+            if parsed is not None:
+                return parsed
+        return _decision_from_payload(payload.content)
+    if isinstance(payload, list):
+        for item in payload:
+            parsed = _decision_from_payload(item)
+            if parsed is not None:
+                return parsed
+        return None
+    if isinstance(payload, str):
+        start = payload.find("{")
+        end = payload.rfind("}")
+        if start == -1 or end <= start:
+            return None
+        try:
+            return _decision_from_payload(json.loads(payload[start : end + 1]))
+        except json.JSONDecodeError:
+            return None
+    if isinstance(payload, dict):
+        if "parsed" in payload:
+            parsed = _decision_from_payload(payload.get("parsed"))
+            if parsed is not None:
+                return parsed
+        names = payload.get("collections", payload.get("collection"))
+        if isinstance(names, str):
+            names = [names]
+        if not isinstance(names, list):
+            return None
+        collections = []
+        for name in names:
+            mapped = _normalize_collection(name)
+            if mapped and mapped not in collections:
+                collections.append(mapped)
+        if not collections:
+            return None
+        return RouteDecision(collections=collections)
+    return None
 
 
 class ScoredCrossEncoderReranker(CrossEncoderReranker):
@@ -115,12 +199,18 @@ def route_query(question: str, router: Runnable) -> list[str]:
     if not question:
         raise ValueError("The question must not be empty.")
 
-    decision = router.invoke({"question": question})
-    if isinstance(decision, dict):
-        decision = RouteDecision.model_validate(decision)
-    if not isinstance(decision, RouteDecision):
-        raise TypeError("The router must return a RouteDecision.")
+    keyword_match = _keyword_collections(question)
+    if keyword_match:
+        return keyword_match
 
+    try:
+        decision = _decision_from_payload(router.invoke({"question": question}))
+    except Exception:
+        logger.exception("Question routing failed. Searching all collections.")
+        return list(ALL_COLLECTIONS)
+    if decision is None:
+        logger.warning("Router did not return collections. Searching all collections.")
+        return list(ALL_COLLECTIONS)
     return list(dict.fromkeys(decision.collections))
 
 

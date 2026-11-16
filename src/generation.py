@@ -15,12 +15,20 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 GROQ_MODEL = "openai/gpt-oss-120b"
 
 
-def build_chat_model() -> ChatGroq:
+def build_chat_model(*, for_routing: bool = False) -> ChatGroq:
     load_dotenv(PROJECT_ROOT / ".env", override=True)
     api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
         raise RuntimeError(
             "Set GROQ_API_KEY in the project .env file or in the Streamlit app secrets."
+        )
+
+    if for_routing:
+        return ChatGroq(
+            api_key=api_key,
+            model=GROQ_MODEL,
+            temperature=0,
+            model_kwargs={"max_completion_tokens": 256},
         )
 
     return ChatGroq(
