@@ -413,7 +413,7 @@ def render_sidebar() -> None:
     inject_styles(hide_sidebar=False)
     with st.sidebar:
         st.header("QueryDocs AI")
-        st.caption(st.session_state.user["name"])
+        st.caption("Ask about ML, Finance, and HR")
         if st.button("New chat", use_container_width=True):
             start_new_chat()
             st.rerun()
