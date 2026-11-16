@@ -1,3 +1,4 @@
+import html
 import os
 from uuid import uuid4
 
@@ -216,121 +217,188 @@ def answer_question(question: str, messages: list[dict]) -> dict:
 
 
 def render_message(message: dict) -> None:
-    with st.chat_message("user" if message["role"] == "user" else "assistant"):
-        st.markdown(message["content"])
-        sources = message.get("sources") or []
-        if sources:
-            st.caption(
-                "Sources: "
-                + " · ".join(
-                    f"{item['source']} — page {item['page_label']}" for item in sources
-                )
-            )
-        collections = message.get("collections") or []
-        if collections:
-            st.caption("Searched: " + ", ".join(collections))
+    if message["role"] == "user":
+        st.markdown(
+            f'<div class="bubble-user">{html.escape(message["content"])}</div>',
+            unsafe_allow_html=True,
+        )
+        return
+    st.markdown(message["content"])
+    sources = message.get("sources") or []
+    if sources:
+        chips = "".join(
+            f'<span class="source-chip">{html.escape(item["source"])} · page {html.escape(str(item["page_label"]))}</span>'
+            for item in sources
+        )
+        st.markdown(
+            f'<div class="source-row"><span class="source-label">SOURCES</span>{chips}</div>',
+            unsafe_allow_html=True,
+        )
 
 
-def inject_styles(*, hide_sidebar: bool, auth_layout: bool = False) -> None:
-    hide_rule = (
-        """
-        [data-testid="stSidebar"] { display: none !important; }
-        [data-testid="stSidebarCollapsedControl"] { display: none !important; }
-        """
-        if hide_sidebar
-        else ""
-    )
-    auth_rule = ""
+def inject_styles(*, auth_layout: bool) -> None:
+    shared = """
+        [data-testid="stToolbar"],
+        [data-testid="stDecoration"],
+        [data-testid="stStatusWidget"],
+        #MainMenu,
+        footer,
+        .stDeployButton { display: none !important; }
+    """
     if auth_layout:
-        auth_rule = """
-        .stApp:has(.auth-page) header[data-testid="stHeader"],
-        .stApp:has(.auth-page) [data-testid="stToolbar"],
-        .stApp:has(.auth-page) [data-testid="stStatusWidget"],
-        .stApp:has(.auth-page) [data-testid="stDecoration"],
-        .stApp:has(.auth-page) [data-testid="stBottom"],
-        .stApp:has(.auth-page) footer,
-        .stApp:has(.auth-page) #MainMenu,
-        .stApp:has(.auth-page) .stDeployButton,
-        .stApp:has(.auth-page) [data-testid="stAppDeployButton"] {
-            display: none !important;
-            visibility: hidden !important;
-        }
-        .stApp:has(.auth-page) .block-container {
-            max-width: 100%;
-            padding: 0;
-        }
-        .stApp:has(.auth-page) [data-testid="stHorizontalBlock"] {
-            gap: 0;
-            align-items: stretch;
-            min-height: 100vh;
-        }
-        .stApp:has(.auth-page) [data-testid="column"]:first-child,
-        .stApp:has(.auth-page) [data-testid="stColumn"]:first-child {
-            background: #f4f7fb !important;
-            min-height: 100vh;
-        }
-        .stApp:has(.auth-page) [data-testid="column"]:last-child {
-            background: #ffffff;
+        rules = """
+        [data-testid="stSidebar"],
+        [data-testid="stSidebarCollapsedControl"],
+        header[data-testid="stHeader"] { display: none !important; }
+        .stApp { background: #ffffff; }
+        .block-container {
+            max-width: 440px;
+            margin-left: 50vw;
             min-height: 100vh;
             display: flex;
             align-items: center;
-        }
-        .stApp:has(.auth-page) [data-testid="column"]:last-child [data-testid="stVerticalBlockBorderWrapper"] {
-            width: min(100%, 440px);
-            margin: 0 auto;
-            padding: 48px 28px;
+            padding: 48px 28px 48px 36px;
         }
         .brand-panel {
-            min-height: 100vh;
+            position: fixed;
+            z-index: 5;
+            left: 0; top: 0;
+            width: 50vw;
+            height: 100vh;
+            overflow: hidden;
+            color: white;
+            background: linear-gradient(180deg, #4c7dff 0%, #2f62f6 100%);
+        }
+        .brand-panel::before, .brand-panel::after {
+            content: "";
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(255,255,255,.13);
+        }
+        .brand-panel::before { width: 340px; height: 340px; top: -90px; right: -80px; }
+        .brand-panel::after { width: 420px; height: 420px; left: -140px; bottom: -120px; }
+        .brand-inner {
+            position: relative;
+            z-index: 1;
+            height: 100%;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-            padding: 28px 36px 24px;
-            color: #3867e8;
+            padding: 28px 40px 26px;
         }
-        .brand-lockup { display: flex; align-items: center; gap: 12px; font-weight: 700; color: #3867e8; }
+        .brand-lockup { display: flex; align-items: center; gap: 12px; font-size: 20px; font-weight: 700; }
         .brand-mark {
-            width: 36px; height: 36px; border-radius: 10px;
+            width: 38px; height: 38px; border-radius: 12px;
             display: grid; place-items: center;
-            background: #3867e8; color: white; font-weight: 800;
+            background: white; color: #2f62f6; font-weight: 800;
         }
         .brand-copy h1 {
-            color: #3867e8 !important; font-size: 42px; line-height: 1.15;
-            margin: 0 0 16px; max-width: 460px;
+            color: white !important;
+            font-size: 46px;
+            line-height: 1.12;
+            font-weight: 750;
+            letter-spacing: -0.03em;
+            margin: 0 0 16px;
+            max-width: 520px;
         }
-        .brand-copy p { color: #3867e8 !important; font-size: 16px; max-width: 420px; margin: 0; }
-        .brand-foot { color: #3867e8; font-size: 13px; }
-        .auth-kicker { color: #5c677a; margin: 0 0 18px; }
-        .auth-divider { color: #8b95a7; text-align: center; margin: 8px 0 4px; font-size: 14px; }
+        .brand-copy p { color: rgba(255,255,255,.88) !important; font-size: 16px; line-height: 1.55; max-width: 430px; margin: 0; }
+        .brand-foot { color: rgba(255,255,255,.75); font-size: 13px; }
+        .login-title { color: #172033; font-size: 32px; font-weight: 750; letter-spacing: -0.03em; margin: 0; }
+        .login-sub { color: #667085; font-size: 15px; margin: 8px 0 22px; }
+        .auth-divider {
+            display: flex; align-items: center; gap: 12px;
+            color: #98a2b3; font-size: 13px; margin: 18px 0 12px;
+        }
+        .auth-divider::before, .auth-divider::after {
+            content: ""; height: 1px; background: #e6eaf2; flex: 1;
+        }
+        [data-testid="stTextInput"] label p { color: #344054; font-weight: 600; font-size: 14px; }
+        [data-testid="stTextInput"] input {
+            border-radius: 12px !important;
+            border: 1px solid #d8e0ee !important;
+            min-height: 46px;
+            background: white;
+        }
+        [data-testid="stFormSubmitButton"] button {
+            background: #2f6bff !important;
+            color: white !important;
+            border: none !important;
+            border-radius: 12px !important;
+            min-height: 48px;
+            font-weight: 700;
+        }
+        .st-key-forgot-password { display: flex; justify-content: flex-end; margin-top: -8px; }
+        .st-key-forgot-password button {
+            background: transparent !important;
+            border: none !important;
+            color: #2f6bff !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+            min-height: 0 !important;
+            font-weight: 600;
+        }
+        .st-key-create-account button,
+        .st-key-google-login button,
+        .st-key-back-login button {
+            background: white !important;
+            color: #1d2939 !important;
+            border: 1px solid #e4e7ec !important;
+            border-radius: 12px !important;
+            min-height: 48px;
+            font-weight: 650;
+        }
         """
-    st.markdown(
-        f"""
-        <style>
-        {hide_rule}
-        {auth_rule}
-        section[data-testid="stSidebar"] > div:first-child {{
-            height: 100%;
-            display: flex;
-            flex-direction: column;
-        }}
-        div[data-testid="stSidebarContent"] {{
-            display: flex;
-            flex-direction: column;
-            height: 100%;
-        }}
-        .sidebar-spacer {{
-            flex: 1 1 auto;
-            min-height: 2rem;
-        }}
-        .sidebar-bottom {{
-            margin-top: auto;
-            padding-top: 0.75rem;
-            border-top: 1px solid rgba(49, 51, 63, 0.16);
-        }}
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
+    else:
+        rules = """
+        .stApp { background: #f5f7fb; }
+        section[data-testid="stSidebar"] {
+            background: #ffffff;
+            border-right: 1px solid #e7ecf4;
+            min-width: 280px;
+        }
+        div[data-testid="stSidebarContent"] {
+            display: flex; flex-direction: column; height: 100%;
+        }
+        .side-brand { display: flex; gap: 10px; align-items: center; padding: 4px 2px 12px; }
+        .side-brand strong { display: block; color: #172033; font-size: 15px; }
+        .side-brand small { color: #8b95a7; font-size: 12px; }
+        .side-mark {
+            width: 34px; height: 34px; border-radius: 10px;
+            display: grid; place-items: center;
+            background: #2f6bff; color: white; font-weight: 800;
+        }
+        .st-key-new-chat button {
+            background: #2f6bff !important; color: white !important;
+            border: none !important; border-radius: 10px !important; font-weight: 700;
+        }
+        .history-label { color: #98a2b3; font-size: 11px; letter-spacing: .08em; font-weight: 700; margin: 16px 0 8px; }
+        div[class*="st-key-chat-"] button {
+            background: transparent !important; border: none !important;
+            color: #475467 !important; text-align: left; border-radius: 8px !important;
+            justify-content: flex-start;
+        }
+        div[class*="st-key-chat-"] button[kind="primary"],
+        div[class*="st-key-chat-"] button[data-testid="stBaseButton-primary"] {
+            background: #e8f0ff !important; color: #2f6bff !important;
+        }
+        .sidebar-spacer { flex: 1 1 auto; min-height: 2rem; }
+        .sidebar-bottom { margin-top: auto; padding-top: 12px; border-top: 1px solid #e7ecf4; }
+        .bubble-user {
+            margin-left: auto; max-width: 70%;
+            background: #2f6bff; color: white;
+            border-radius: 16px 16px 4px 16px;
+            padding: 12px 16px; width: fit-content;
+        }
+        .source-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
+        .source-label { color: #98a2b3; font-size: 11px; letter-spacing: .08em; font-weight: 700; }
+        .source-chip {
+            background: #eef3ff; color: #2f6bff; border-radius: 999px;
+            padding: 4px 10px; font-size: 12px;
+        }
+        .chat-note { color: #98a2b3; text-align: center; font-size: 12px; margin-top: 8px; }
+        [data-testid="stChatInput"] { background: transparent; }
+        """
+    st.markdown(f"<style>{shared}{rules}</style>", unsafe_allow_html=True)
 
 
 def google_auth_configured() -> bool:
@@ -374,72 +442,80 @@ def finish_google_login() -> None:
 
 
 def render_google_button() -> None:
-    if st.button("Continue with Google", use_container_width=True):
+    if st.button("Continue with Google", key="google-login", use_container_width=True):
         start_google_login()
 
 
 def render_login_page() -> None:
-    inject_styles(hide_sidebar=True, auth_layout=True)
-    st.markdown('<div class="auth-page"></div>', unsafe_allow_html=True)
+    inject_styles(auth_layout=True)
     finish_google_login()
-    brand, form = st.columns([1.05, 1], gap="small")
-    with brand:
+    st.markdown(
+        """
+        <div class="brand-panel">
+          <div class="brand-inner">
+            <div class="brand-lockup"><span class="brand-mark">Q</span><span>QueryDocs AI</span></div>
+            <div class="brand-copy">
+              <h1>Get answers straight from your documents.</h1>
+              <p>Ask questions about ML, Finance and HR and get clear, cited answers from your own files.</p>
+            </div>
+            <div class="brand-foot">© 2026 QueryDocs AI</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if st.session_state.auth_notice:
+        st.success(st.session_state.auth_notice)
+    if st.session_state.auth_error:
+        st.error(st.session_state.auth_error)
+
+    view = st.session_state.auth_view
+    if view == "login":
         st.markdown(
             """
-            <div class="brand-panel">
-              <div class="brand-lockup"><span class="brand-mark">Q</span><span>QueryDocs AI</span></div>
-              <div class="brand-copy">
-                <h1>Get answers straight from your documents.</h1>
-                <p>Ask questions about ML, Finance and HR and get clear, cited answers from your own files.</p>
-              </div>
-              <div class="brand-foot">© 2026 QueryDocs AI</div>
-            </div>
+            <div class="login-title">Log in</div>
+            <p class="login-sub">Sign in to ask questions from your documents.</p>
             """,
             unsafe_allow_html=True,
         )
-    with form:
-        if st.session_state.auth_notice:
-            st.success(st.session_state.auth_notice)
-        if st.session_state.auth_error:
-            st.error(st.session_state.auth_error)
-
-        view = st.session_state.auth_view
-        if view == "login":
-            st.header("Log in")
-            st.markdown('<p class="auth-kicker">Ask questions from your documents.</p>', unsafe_allow_html=True)
-            with st.form("login-form"):
-                email = st.text_input("Email address", placeholder="you@example.com")
-                password = st.text_input("Password", type="password", placeholder="Password")
-                submitted = st.form_submit_button("Log in", use_container_width=True, type="primary")
-            if submitted:
-                try:
-                    user, error = authenticate(email, password)
-                except Exception as error:
-                    st.session_state.auth_error = f"Sign in failed. {error}"
-                    st.rerun()
-                if error:
-                    st.session_state.auth_error = error
-                    st.rerun()
-                complete_login(user)
+        with st.form("login-form"):
+            email = st.text_input("Email address", placeholder="you@example.com")
+            password = st.text_input("Password", type="password", placeholder="Password")
+            submitted = st.form_submit_button("Log in", use_container_width=True, type="primary")
+        if submitted:
+            try:
+                user, error = authenticate(email, password)
+            except Exception as error:
+                st.session_state.auth_error = f"Sign in failed. {error}"
                 st.rerun()
-
-            if st.button("Forgot password?"):
-                st.session_state.auth_view = "forgot"
-                st.session_state.auth_error = ""
-                st.session_state.auth_notice = ""
+            if error:
+                st.session_state.auth_error = error
                 st.rerun()
-            st.markdown('<p class="auth-divider">New to QueryDocs AI?</p>', unsafe_allow_html=True)
-            if st.button("Create new account", use_container_width=True):
-                st.session_state.auth_view = "signup"
-                st.session_state.auth_error = ""
-                st.session_state.auth_notice = ""
-                st.rerun()
-            return
+            complete_login(user)
+            st.rerun()
 
-        if view == "signup":
-            st.header("Create new account")
-            st.markdown('<p class="auth-kicker">Ask questions from your documents.</p>', unsafe_allow_html=True)
-            render_google_button()
+        if st.button("Forgot password?", key="forgot-password"):
+            st.session_state.auth_view = "forgot"
+            st.session_state.auth_error = ""
+            st.session_state.auth_notice = ""
+            st.rerun()
+        st.markdown('<div class="auth-divider">New to QueryDocs AI?</div>', unsafe_allow_html=True)
+        if st.button("Create new account", key="create-account", use_container_width=True):
+            st.session_state.auth_view = "signup"
+            st.session_state.auth_error = ""
+            st.session_state.auth_notice = ""
+            st.rerun()
+        return
+
+    if view == "signup":
+        st.markdown(
+            """
+            <div class="login-title">Create new account</div>
+            <p class="login-sub">Sign in to ask questions from your documents.</p>
+            """,
+            unsafe_allow_html=True,
+        )
+        render_google_button()
             with st.form("signup-form"):
                 name = st.text_input("Full name", placeholder="Your name")
                 email = st.text_input("Email address", placeholder="you@example.com")
@@ -480,7 +556,7 @@ def render_login_page() -> None:
                     st.rerun()
                 complete_login(user)
                 st.rerun()
-            if st.button("Back to log in", use_container_width=True):
+            if st.button("Back to log in", key="back-login", use_container_width=True):
                 st.session_state.auth_view = "login"
                 st.session_state.auth_error = ""
                 st.rerun()
@@ -519,15 +595,21 @@ def render_login_page() -> None:
 
 
 def render_sidebar() -> None:
-    inject_styles(hide_sidebar=False)
+    inject_styles(auth_layout=False)
     with st.sidebar:
-        st.header("QueryDocs AI")
-        st.caption("Ask about ML, Finance, and HR")
-        if st.button("New chat", use_container_width=True):
+        st.markdown(
+            """
+            <div class="side-brand">
+              <span class="side-mark">Q</span>
+              <div><strong>QueryDocs AI</strong><small>Ask about ML, Finance, and HR</small></div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        if st.button("+ New chat", key="new-chat", use_container_width=True):
             start_new_chat()
             st.rerun()
-        st.divider()
-        st.caption("Chat history")
+        st.markdown('<div class="history-label">CHAT HISTORY</div>', unsafe_allow_html=True)
         if st.session_state.chats:
             for chat in st.session_state.chats:
                 selected = chat["id"] == st.session_state.active_chat_id
@@ -563,8 +645,12 @@ if st.session_state.user is None:
 
 render_sidebar()
 
-st.title("QueryDocs AI")
-st.caption("Ask a question about your documents. Answers include the source page.")
+active_title = "New chat"
+for chat in st.session_state.chats:
+    if chat["id"] == st.session_state.active_chat_id:
+        active_title = chat.get("title") or "New chat"
+        break
+st.markdown(f'<div class="login-title" style="font-size:20px;margin-bottom:16px;">{html.escape(active_title)}</div>', unsafe_allow_html=True)
 
 try:
     load_pipeline()
@@ -581,6 +667,10 @@ except Exception as error:
 for message in st.session_state.messages:
     render_message(message)
 
+st.markdown(
+    '<p class="chat-note">Answers are generated from your uploaded documents.</p>',
+    unsafe_allow_html=True,
+)
 question = st.chat_input("Ask anything about your documents...")
 if not question:
     st.stop()
