@@ -83,6 +83,14 @@ def _write_user(user: dict) -> None:
     )
 
 
+def _public_user(user: dict, email: str) -> dict:
+    return {
+        "email": email,
+        "name": user.get("name") or email,
+        "chats": user.get("chats") or [],
+    }
+
+
 def signup(name: str, email: str, password: str) -> str | None:
     clean_name = " ".join(name.split())
     clean_email = _normalize_email(email)
@@ -102,6 +110,7 @@ def signup(name: str, email: str, password: str) -> str | None:
             "name": clean_name,
             "salt": salt,
             "password_hash": _password_hash(password, salt),
+            "provider": "password",
             "chats": [],
         }
     )
@@ -115,10 +124,36 @@ def authenticate(email: str, password: str) -> tuple[dict | None, str | None]:
         return None, "Email or password is incorrect."
     salt = str(user.get("salt", ""))
     expected = str(user.get("password_hash", ""))
-    if not salt or not secrets.compare_digest(_password_hash(password, salt), expected):
+    password_matches = bool(salt) and secrets.compare_digest(_password_hash(password, salt), expected)
+    if not password_matches:
+        if user.get("provider") == "google":
+            return None, "This email uses Google sign-in."
         return None, "Email or password is incorrect."
-    chats = user.get("chats") or []
-    return {"email": clean_email, "name": user.get("name") or clean_email, "chats": chats}, None
+    return _public_user(user, clean_email), None
+
+
+def login_with_google(email: str, name: str) -> tuple[dict | None, str | None]:
+    clean_email = _normalize_email(email)
+    if "@" not in clean_email or "." not in clean_email.split("@")[-1]:
+        return None, "Google did not return an email address."
+    clean_name = " ".join((name or "").split()) or clean_email
+    user = _read_user(clean_email)
+    if user is None:
+        salt = secrets.token_hex(16)
+        _write_user(
+            {
+                "email": clean_email,
+                "name": clean_name,
+                "salt": salt,
+                "password_hash": _password_hash(secrets.token_hex(32), salt),
+                "provider": "google",
+                "chats": [],
+            }
+        )
+        user = _read_user(clean_email)
+    if user is None:
+        return None, "The Google account could not be saved."
+    return _public_user(user, clean_email), None
 
 
 def save_chats(email: str, chats: list[dict]) -> None:

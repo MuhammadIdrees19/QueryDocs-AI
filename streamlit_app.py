@@ -5,7 +5,7 @@ import streamlit as st
 from groq import APIStatusError, RateLimitError
 from langchain_core.messages import AIMessage, HumanMessage
 
-from src.accounts import authenticate, reset_password, save_chats, signup
+from src.accounts import authenticate, login_with_google, reset_password, save_chats, signup
 from src.citations import matching_sources
 
 SECRET_KEYS = ("GROQ_API_KEY", "QDRANT_URL", "QDRANT_API_KEY")
@@ -159,6 +159,9 @@ def complete_login(user: dict) -> None:
 
 
 def sign_out() -> None:
+    logout = getattr(st, "logout", None)
+    if logout is not None and bool(getattr(getattr(st, "user", None), "is_logged_in", False)):
+        logout()
     st.session_state.user = None
     st.session_state.chats = []
     st.session_state.active_chat_id = None
@@ -278,6 +281,51 @@ def inject_styles(*, hide_sidebar: bool) -> None:
     )
 
 
+def google_auth_configured() -> bool:
+    try:
+        auth = st.secrets["auth"]
+    except Exception:
+        return False
+    return all(str(auth.get(key, "")).strip() for key in ("client_id", "client_secret", "redirect_uri", "cookie_secret"))
+
+
+def start_google_login() -> None:
+    if not google_auth_configured():
+        st.session_state.auth_error = (
+            "Google sign-in needs client_id, client_secret, redirect_uri, and cookie_secret "
+            "under [auth] in the Streamlit secrets."
+        )
+        st.rerun()
+    login = getattr(st, "login", None)
+    if login is None:
+        st.session_state.auth_error = "Update Streamlit to use Google sign-in."
+        st.rerun()
+    login()
+
+
+def finish_google_login() -> None:
+    user_info = getattr(st, "user", None)
+    if not bool(getattr(user_info, "is_logged_in", False)):
+        return
+    email = str(getattr(user_info, "email", "") or "")
+    name = str(getattr(user_info, "name", "") or email)
+    try:
+        account, error = login_with_google(email, name)
+    except Exception as error:
+        st.session_state.auth_error = f"Google sign-in failed. {error}"
+        return
+    if error or account is None:
+        st.session_state.auth_error = error or "Google sign-in failed."
+        return
+    complete_login(account)
+    st.rerun()
+
+
+def render_google_button() -> None:
+    if st.button("Continue with Google", use_container_width=True):
+        start_google_login()
+
+
 def render_login_page() -> None:
     inject_styles(hide_sidebar=True)
     st.markdown(
@@ -290,6 +338,7 @@ def render_login_page() -> None:
         unsafe_allow_html=True,
     )
 
+    finish_google_login()
     left, center, right = st.columns([1, 2, 1])
     with center:
         if st.session_state.auth_notice:
@@ -299,6 +348,8 @@ def render_login_page() -> None:
 
         view = st.session_state.auth_view
         if view == "login":
+            render_google_button()
+            st.caption("or use your email")
             with st.form("login-form"):
                 email = st.text_input(
                     "Email",
@@ -339,16 +390,26 @@ def render_login_page() -> None:
 
         if view == "signup":
             st.subheader("Create new account")
+            st.caption("Use your name, email, and password, or continue with Google.")
+            render_google_button()
             with st.form("signup-form"):
-                name = st.text_input("Name", placeholder="Your name")
-                email = st.text_input("Email", placeholder="Email address")
-                password = st.text_input("Password", type="password", placeholder="Password")
+                name = st.text_input("Full name", placeholder="Your name")
+                email = st.text_input("Email address", placeholder="you@example.com")
+                password = st.text_input("Password", type="password", placeholder="At least 6 characters")
+                confirm_password = st.text_input(
+                    "Confirm password",
+                    type="password",
+                    placeholder="Repeat your password",
+                )
                 submitted = st.form_submit_button(
                     "Create account",
                     use_container_width=True,
                     type="primary",
                 )
             if submitted:
+                if password != confirm_password:
+                    st.session_state.auth_error = "Passwords do not match."
+                    st.rerun()
                 try:
                     error = signup(name, email, password)
                 except Exception as error:
