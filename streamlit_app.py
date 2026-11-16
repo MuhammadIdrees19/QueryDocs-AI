@@ -231,7 +231,7 @@ def render_message(message: dict) -> None:
             st.caption("Searched: " + ", ".join(collections))
 
 
-def inject_styles(*, hide_sidebar: bool) -> None:
+def inject_styles(*, hide_sidebar: bool, auth_layout: bool = False) -> None:
     hide_rule = (
         """
         [data-testid="stSidebar"] { display: none !important; }
@@ -240,22 +240,66 @@ def inject_styles(*, hide_sidebar: bool) -> None:
         if hide_sidebar
         else ""
     )
+    auth_rule = ""
+    if auth_layout:
+        auth_rule = """
+        .stApp:has(.auth-page) header[data-testid="stHeader"] { display: none; }
+        .stApp:has(.auth-page) .block-container {
+            max-width: 100%;
+            padding: 0;
+        }
+        .stApp:has(.auth-page) [data-testid="stHorizontalBlock"] {
+            gap: 0;
+            align-items: stretch;
+            min-height: 100vh;
+        }
+        .stApp:has(.auth-page) [data-testid="column"]:first-child {
+            background:
+                radial-gradient(circle at 18% 22%, rgba(255,255,255,.16), transparent 28%),
+                radial-gradient(circle at 88% 78%, rgba(255,255,255,.12), transparent 26%),
+                linear-gradient(180deg, #4d7dff 0%, #2f62f6 100%);
+            color: white;
+            min-height: 100vh;
+        }
+        .stApp:has(.auth-page) [data-testid="column"]:last-child {
+            background: #ffffff;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+        }
+        .stApp:has(.auth-page) [data-testid="column"]:last-child [data-testid="stVerticalBlockBorderWrapper"] {
+            width: min(100%, 440px);
+            margin: 0 auto;
+            padding: 48px 28px;
+        }
+        .brand-panel {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 28px 36px 24px;
+            color: white;
+        }
+        .brand-lockup { display: flex; align-items: center; gap: 12px; font-weight: 700; }
+        .brand-mark {
+            width: 36px; height: 36px; border-radius: 10px;
+            display: grid; place-items: center;
+            background: white; color: #2f62f6; font-weight: 800;
+        }
+        .brand-copy h1 {
+            color: white; font-size: 42px; line-height: 1.15;
+            margin: 0 0 16px; max-width: 460px;
+        }
+        .brand-copy p { color: rgba(255,255,255,.88); font-size: 16px; max-width: 420px; margin: 0; }
+        .brand-foot { color: rgba(255,255,255,.75); font-size: 13px; }
+        .auth-kicker { color: #5c677a; margin: 0 0 18px; }
+        .auth-divider { color: #8b95a7; text-align: center; margin: 8px 0 4px; font-size: 14px; }
+        """
     st.markdown(
         f"""
         <style>
         {hide_rule}
-        .auth-shell {{
-            max-width: 420px;
-            margin: 4rem auto 2rem;
-            text-align: center;
-        }}
-        .auth-shell h1 {{
-            margin-bottom: 0.25rem;
-        }}
-        .auth-shell p {{
-            color: #5b6472;
-            margin-bottom: 1.5rem;
-        }}
+        {auth_rule}
         section[data-testid="stSidebar"] > div:first-child {{
             height: 100%;
             display: flex;
@@ -327,20 +371,25 @@ def render_google_button() -> None:
 
 
 def render_login_page() -> None:
-    inject_styles(hide_sidebar=True)
-    st.markdown(
-        """
-        <div class="auth-shell">
-          <h1>QueryDocs AI</h1>
-          <p>Sign in to ask questions from your documents.</p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
+    inject_styles(hide_sidebar=True, auth_layout=True)
+    st.markdown('<div class="auth-page"></div>', unsafe_allow_html=True)
     finish_google_login()
-    left, center, right = st.columns([1, 2, 1])
-    with center:
+    brand, form = st.columns([1.05, 1], gap="small")
+    with brand:
+        st.markdown(
+            """
+            <div class="brand-panel">
+              <div class="brand-lockup"><span class="brand-mark">Q</span><span>QueryDocs AI</span></div>
+              <div class="brand-copy">
+                <h1>Get answers straight from your documents.</h1>
+                <p>Ask questions about ML, Finance and HR and get clear, cited answers from your own files.</p>
+              </div>
+              <div class="brand-foot">© 2026 QueryDocs AI</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with form:
         if st.session_state.auth_notice:
             st.success(st.session_state.auth_notice)
         if st.session_state.auth_error:
@@ -348,20 +397,11 @@ def render_login_page() -> None:
 
         view = st.session_state.auth_view
         if view == "login":
-            render_google_button()
-            st.caption("or use your email")
+            st.header("Log in")
+            st.markdown('<p class="auth-kicker">Ask questions from your documents.</p>', unsafe_allow_html=True)
             with st.form("login-form"):
-                email = st.text_input(
-                    "Email",
-                    placeholder="Email address",
-                    label_visibility="collapsed",
-                )
-                password = st.text_input(
-                    "Password",
-                    type="password",
-                    placeholder="Password",
-                    label_visibility="collapsed",
-                )
+                email = st.text_input("Email address", placeholder="you@example.com")
+                password = st.text_input("Password", type="password", placeholder="Password")
                 submitted = st.form_submit_button("Log in", use_container_width=True, type="primary")
             if submitted:
                 try:
@@ -375,12 +415,12 @@ def render_login_page() -> None:
                 complete_login(user)
                 st.rerun()
 
-            if st.button("Forgotten password?", use_container_width=True):
+            if st.button("Forgot password?"):
                 st.session_state.auth_view = "forgot"
                 st.session_state.auth_error = ""
                 st.session_state.auth_notice = ""
                 st.rerun()
-            st.write("")
+            st.markdown('<p class="auth-divider">New to QueryDocs AI?</p>', unsafe_allow_html=True)
             if st.button("Create new account", use_container_width=True):
                 st.session_state.auth_view = "signup"
                 st.session_state.auth_error = ""
@@ -389,8 +429,8 @@ def render_login_page() -> None:
             return
 
         if view == "signup":
-            st.subheader("Create new account")
-            st.caption("Use your name, email, and password, or continue with Google.")
+            st.header("Create new account")
+            st.markdown('<p class="auth-kicker">Ask questions from your documents.</p>', unsafe_allow_html=True)
             render_google_button()
             with st.form("signup-form"):
                 name = st.text_input("Full name", placeholder="Your name")
